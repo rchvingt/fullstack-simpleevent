@@ -1,0 +1,93 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+
+model Session {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  user_id        String   @db.VarChar(36)
+  active_expires BigInt
+  idle_expires   BigInt
+  user           User     @relation(references: [id], fields: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+model User {
+  id        String    @id @default(uuid()) @db.VarChar(36)
+  username  String    @unique
+  password  String    @db.VarChar(100)
+  name      String    @db.VarChar(100)
+  token     String?   @db.VarChar(100)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // User Model: A user can have many events.
+  events    Event[]
+  person    PersonEvent[]
+
+  // lucia auth
+  sessions  Session[]
+
+  @@map("users")
+}
+
+model Event {
+  event_id    Int       @id @default(autoincrement())
+  title       String    @db.VarChar(100)
+  start       DateTime
+  end         DateTime
+  timezone    String
+  isAllDay    Boolean   @default(false)
+  isFindTime  Boolean   @default(false)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  user_id     String    @db.VarChar(36)  
+
+  user        User?     @relation(fields: [user_id], references: [id])
+  person      PersonEvent[]
+
+  @@map("events")
+}
+
+model Person {
+  person_id    Int       @id @default(autoincrement())
+  person_name  String    @db.VarChar(100)
+  person_email String    @db.VarChar(100)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  // Person Model: A person can attend many events
+  events       PersonEvent[]
+
+  @@map("person")
+}
+
+model PersonEvent {
+  id           Int       @id @default(autoincrement())
+  person_id    Int       @db.Int    
+  event_id     Int       @db.Int 
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  user_id     String    @db.VarChar(36)  
+
+  // EventPerson Model: A join table to handle the many-to-many relationship between events and people
+  person       Person?   @relation(fields: [person_id], references: [person_id])
+  event        Event?    @relation(fields: [event_id], references: [event_id])
+  user         User      @relation(fields: [user_id], references: [id])
+
+  @@unique([event_id, person_id])
+    
+  @@map("eventPerson")
+}
