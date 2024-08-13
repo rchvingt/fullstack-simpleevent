@@ -15,13 +15,15 @@ datasource db {
 
 
 model Session {
-  id             String   @id @default(uuid()) @db.VarChar(36)
-  user_id        String   @db.VarChar(36)
-  active_expires BigInt
-  idle_expires   BigInt
-  user           User     @relation(references: [id], fields: [user_id], onDelete: Cascade)
+  id          String   @id @db.VarChar(36)
+  userId      String   @db.VarChar(36)
+  expiresAt   DateTime @db.DateTime()
+  fresh Boolean @default(true)
+ 
+  user           User     @relation(references: [id], fields: [userId], onDelete: Cascade)
 
-  @@index([user_id])
+  @@index([userId])
+  @@map("session")
 }
 
 model User {

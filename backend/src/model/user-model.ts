@@ -1,4 +1,5 @@
 import { User, Session } from "@prisma/client";
+import { logger } from "../application/logging";
 
 export type UserResponse = {
 	id: string;
@@ -7,18 +8,29 @@ export type UserResponse = {
 	token?: string;
 };
 
-export type UserSession = {
-	id: string;
-	user_id: string;
-	active_expires: BigInt;
-	idle_expires: BigInt;
-};
+// export type UserSession = {
+// 	id: string;
+// 	userId: string;
+// 	expiresAt: Date;
+// 	fresh: Boolean;
+
+// };
 
 export type CreateUserRequest = {
 	id: string;
 	username: string;
 	name: string;
 	password: string;
+};
+
+export type LoginUserRequest = {
+	username: string;
+	password: string;
+};
+
+export type UpdateUserRequest = {
+	name?: string;
+	password?: string;
 };
 
 export function toUserResponse(user: User): UserResponse {
@@ -29,11 +41,11 @@ export function toUserResponse(user: User): UserResponse {
 	};
 }
 
-export function toUserSession(session: Session): UserSession {
-	return {
-		id: session.id,
-		user_id: session.user_id,
-		active_expires: session.idle_expires,
-		idle_expires: session.idle_expires,
-	};
-}
+// export function toUserSession(session: Session): UserSession {
+// 	return {
+// 		id: session.id,
+// 		userId: session.userId,
+// 		expiresAt: session.expiresAt,
+// 		fresh: session.fresh,
+// 	};
+// }

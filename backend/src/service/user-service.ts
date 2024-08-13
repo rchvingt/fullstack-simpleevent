@@ -1,4 +1,4 @@
-import { CreateUserRequest, toUserResponse, UserResponse, toUserSession, UserSession } from "../model/user-model";
+import { CreateUserRequest, toUserResponse, UserResponse, LoginUserRequest, UpdateUserRequest } from "../model/user-model";
 import { Validation } from "../validation/validation";
 import { UserValidation } from "../validation/user-validation";
 import { prismaClient } from "../application/database";
@@ -8,6 +8,7 @@ import { v4 as uuid } from "uuid";
 import { User } from "@prisma/client";
 import { lucia } from "../application/auth";
 import { logger } from "../application/logging";
+import { generateId } from "lucia";
 
 export class UserService {
 	static async register(request: CreateUserRequest): Promise<{ user: UserResponse; sessionCookie: string }> {
@@ -30,34 +31,90 @@ export class UserService {
 			data: registerRequest,
 		});
 
-		// const session = await lucia.createSession(registerRequest.id, {
-		// 	expiresIn: 60 * 60 * 24 * 30,
-		// });
-
-		// const sessionCookie = lucia.createSessionCookie(session.id).serialize();
-
-		const now = BigInt(Date.now());
-		const activeExpires = now + BigInt(60 * 60 * 1000); // Contoh 1 jam kemudian
-		const idleExpires = now + BigInt(30 * 60 * 1000); // Contoh 30 menit kemudian
-
-		const session = await prismaClient.session.create({
-			data: {
-				id: uuid(),
-				user_id: registerRequest.id,
-				active_expires: activeExpires,
-				idle_expires: idleExpires,
-			},
-		});
-
-		// Create a session for the user
-		// const session = await lucia.createSession(registerRequest.username, {});
+		const session = await lucia.createSession(registerRequest.id, {}, { sessionId: generateId(15) });
 
 		// Create session cookie
 		const sessionCookie = lucia.createSessionCookie(session.id).serialize();
+
 		return {
-			user: toUserResponse(user), // This is the correct usage
+			user: toUserResponse(user),
+			sessionCookie: sessionCookie,
+		};
+	}
+
+	static async login(request: LoginUserRequest): Promise<{ user: UserResponse; sessionCookie: string }> {
+		const loginRequest = Validation.validate(UserValidation.LOGIN, request);
+
+		// check if user existed
+		let user = await prismaClient.user.findUnique({
+			where: {
+				username: loginRequest.username,
+			},
+		});
+
+		if (!user) {
+			throw new ResponseError(401, "Username or password is wrong");
+		}
+
+		const isPasswordValid = await bcrypt.compare(loginRequest.password, user.password);
+		if (!isPasswordValid) {
+			throw new ResponseError(401, "Username or password is wrong");
+		}
+
+		const sessionId = generateId(15);
+
+		const session = await lucia.createSession(user.id, {}, { sessionId: sessionId });
+
+		// Create session cookie
+		const sessionCookie = lucia.createSessionCookie(session.id).serialize();
+
+		return {
+			user: toUserResponse(user),
 			sessionCookie,
 		};
-		// return toUserResponse(user);
+	}
+
+	static async checkUserMustExists(userId: string): Promise<User> {
+		const users = await prismaClient.user.findFirst({
+			where: {
+				id: userId,
+			},
+		});
+
+		if (!users) {
+			throw new ResponseError(404, "User is not found");
+		}
+
+		return users;
+	}
+	static async get(userId: string): Promise<UserResponse> {
+		const user = await this.checkUserMustExists(userId);
+		return toUserResponse(user);
+	}
+
+	static async update(userId: string, request: UpdateUserRequest): Promise<UserResponse> {
+		const updateRequest = Validation.validate(UserValidation.UPDATE, request);
+		const user = await this.checkUserMustExists(userId);
+
+		if (updateRequest.name) {
+			user.name = updateRequest.name;
+		}
+
+		if (updateRequest.password) {
+			user.password = await bcrypt.hash(updateRequest.password, 10);
+		}
+
+		const result = await prismaClient.user.update({
+			where: {
+				id: userId,
+			},
+			data: user,
+		});
+
+		return toUserResponse(result);
+	}
+
+	static async logout(sessionId: string): Promise<void> {
+		await lucia.invalidateSession(sessionId);
 	}
 }
